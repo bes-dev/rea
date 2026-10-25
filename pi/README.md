@@ -49,6 +49,21 @@ Measured with REA 6.8.0:
 - **`rea-local` skill.** A short workflow guide that replaces the 35 KB
   bundled skill.
 
+## Measured runs
+
+Pi 1.4 with qwen3.8-27b-splash in LM Studio (200K context) on an M-series Mac
+with 64 GB, REA 6.8.0, each task from a fresh session:
+
+| Task | Result | Time | Top-level calls | Final context |
+|---|---|---|---|---|
+| Packed 4-file Electron ASAR: endpoint and IPC channel behind "sync" | correct | 6 min | 16 | 29K tokens |
+| Stripped arm64 Mach-O via Ghidra: license rule and XOR-hidden URL | correct; the key it derived statically is accepted by the binary | 15 min | 18 | 48K tokens |
+| 26 MB Electron app (967 files): where the chat server URL comes from | correct, including a user override in `userData/server-url.json` | 11.5 min | 34 | 41K tokens |
+
+Before the profile, example and skill fixes, the first task took 36 calls
+and 45K tokens, and the third ran out its 50-minute limit at 63 calls and
+85K tokens.
+
 ## Install
 
 ```bash

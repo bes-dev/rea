@@ -3,7 +3,7 @@ import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerAsk } from "./ask.ts";
 import { loadExamples } from "./examples.ts";
 import { registerOffload } from "./offload.ts";
-import { PROFILES, selectTools } from "./profiles.ts";
+import { PROFILES, resolveProfile, selectTools } from "./profiles.ts";
 import { registerView } from "./view.ts";
 
 const PREFIX = "mcp__rea__";
@@ -12,8 +12,8 @@ const LIST = Object.entries(PROFILES).map(([name, p]) => `- ${name}: ${p.descrip
 
 export default function (pi: ExtensionAPI) {
   const command = process.env.REA_COMMAND ?? "rea";
-  let profiles = (process.env.REA_PI_PROFILES ?? "triage").split(",");
-  let examples = new Map<string, string>();
+  let profiles = (process.env.REA_PI_PROFILES ?? "triage").split(",").flatMap((name) => resolveProfile(name) ?? []);
+  let examples = new Map<string, unknown[]>();
 
   // Every REA tool is registered but deferred; profiles decide which ones are declared.
   pi.registerMcpServer("rea", {
@@ -41,12 +41,14 @@ export default function (pi: ExtensionAPI) {
     return selected;
   };
 
+  /** Loads the known profiles among `names`; a local model's near-miss must not leave it with no tools. */
   const select = (names: string[]) => {
-    const unknown = names.filter((name) => !(name in PROFILES));
-    if (unknown.length) throw new Error(`Unknown REA profiles: ${unknown.join(", ")}. Known:\n${LIST}`);
-    profiles = names;
+    const known = [...new Set(names.flatMap((name) => resolveProfile(name) ?? []))];
+    const unknown = names.filter((name) => !resolveProfile(name));
+    if (!known.length) throw new Error(`Unknown REA profiles: ${unknown.join(", ")}. Known:\n${LIST}`);
+    profiles = known;
     pi.appendEntry(ENTRY, { profiles });
-    return apply(true);
+    return { tools: apply(true), unknown };
   };
 
   pi.on("session_start", (_event, ctx) => {
@@ -66,11 +68,17 @@ export default function (pi: ExtensionAPI) {
       label: "REA profile",
       description: `Load the REA tool sets for the current task, replacing the previous selection. Combine profiles when needed.\n${LIST}`,
       parameters: Type.Object({ profiles: Type.Array(Type.String()) }),
-      // Appends one valid call to each declared REA tool, since compact schemas lose union shapes.
+      // Appends valid calls to the declared REA tools, since compact schemas lose union shapes:
+      // one per tool, and every view example to rea_view, whose views are the hardest to guess.
       prepareLoadout: (loadout) => ({
         descriptions: Object.fromEntries(
           loadout.declared.flatMap((tool) => {
-            const example = examples.get(tool.name.slice(PREFIX.length));
+            if (tool.name === "rea_view") {
+              const views = (examples.get("inspect_analysis_view") ?? []) as { view?: unknown }[];
+              const list = views.map((e) => JSON.stringify(e.view)).join("\n");
+              return list ? [[tool.name, `${tool.description}\nValid views:\n${list}`]] : [];
+            }
+            const example = JSON.stringify(examples.get(tool.name.slice(PREFIX.length))?.[0]);
             return tool.name.startsWith(PREFIX) && example && example.length <= 1000
               ? [[tool.name, `${tool.description}\nExample arguments: ${example}`]]
               : [];
@@ -78,8 +86,9 @@ export default function (pi: ExtensionAPI) {
         ),
       }),
       async execute(_id, params) {
-        const tools = select(params.profiles);
-        const text = `Profiles ${profiles.join(", ")}. Call these tools directly from your next step:\n${tools.join("\n")}`;
+        const { tools, unknown } = select(params.profiles);
+        const ignored = unknown.length ? ` Not profiles, ignored: ${unknown.join(", ")}.` : "";
+        const text = `Profiles ${profiles.join(", ")}.${ignored} Call these tools directly from your next step:\n${tools.join("\n")}`;
         return { content: [{ type: "text", text }], details: undefined };
       },
     }),

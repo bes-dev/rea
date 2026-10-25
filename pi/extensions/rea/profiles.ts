@@ -119,6 +119,20 @@ export const PROFILES: Record<string, { description: string; tools: string[] }> 
   },
 };
 
+/** Names models reach for that are not profile names. */
+const ALIASES: Record<string, string> = {
+  electron: "js", javascript: "js", node: "js", asar: "js", binary: "native", elf: "native", pe: "native",
+  macho: "native", ghidra: "native", ida: "native", ios: "apple", macos: "apple", swift: "apple",
+  objc: "apple", dotnet: "managed", ".net": "managed", csharp: "managed", apk: "android", frida: "dynamic",
+  debug: "dynamic", runtime: "dynamic", website: "web", browser: "web", diff: "compare", pcap: "firmware",
+};
+
+/** The profile a name selects, if any. */
+export const resolveProfile = (name: string) => {
+  const key = name.trim().toLowerCase();
+  return key in PROFILES ? key : ALIASES[key];
+};
+
 const matches = (pattern: string, name: string) =>
   new RegExp(`^${pattern.replaceAll("*", ".*")}$`).test(name);
 

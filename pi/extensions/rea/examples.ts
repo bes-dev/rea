@@ -1,12 +1,12 @@
 import { spawn } from "node:child_process";
 
 /**
- * One valid call per REA tool, from REA's full-profile catalog. The compact schemas the model sees
+ * Valid calls per REA tool, from REA's full-profile catalog. The compact schemas the model sees
  * drop these examples, though they are the cheapest way to show the shape of union inputs.
  */
 export const loadExamples = (command: string) =>
-  new Promise<Map<string, string>>((resolve) => {
-    const examples = new Map<string, string>();
+  new Promise<Map<string, unknown[]>>((resolve) => {
+    const examples = new Map<string, unknown[]>();
     const child = spawn(command, ["--mcp"], {
       env: { ...process.env, REA_MCP_INPUT_SCHEMA_PROFILE: "full", REA_MCP_OUTPUT_SCHEMA_PROFILE: "off" },
       stdio: ["pipe", "pipe", "ignore"],
@@ -24,8 +24,7 @@ export const loadExamples = (command: string) =>
         }
         if (message.id === 2) {
           for (const tool of message.result?.tools ?? []) {
-            const example = tool.inputSchema?.examples?.[0];
-            if (example) examples.set(tool.name, JSON.stringify(example));
+            if (tool.inputSchema?.examples?.length) examples.set(tool.name, tool.inputSchema.examples);
           }
           child.kill();
         }
