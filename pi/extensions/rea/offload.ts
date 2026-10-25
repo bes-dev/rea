@@ -3,7 +3,9 @@ import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { digest } from "./digest.ts";
 
-const BUDGET = Number(process.env.REA_PI_DIGEST_CHARS ?? 3000);
+const BUDGET = Number(process.env.REA_PI_DIGEST_CHARS ?? 6000);
+/** Results this small pass through unchanged; larger ones are saved and shown as their normalized result. */
+const PASS = 1500;
 
 const isRea = (name: string) => name.startsWith("mcp__rea__") || name === "rea_view";
 
@@ -28,8 +30,8 @@ export const registerOffload = (pi: ExtensionAPI) => {
   pi.on("tool_result", (event, ctx) => {
     if (!isRea(event.toolName) || event.parentToolCallId) return;
     const text = event.content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
-    if (text.length <= BUDGET) return;
-    if (event.isError) return { content: [{ type: "text", text: text.slice(0, BUDGET) }] };
+    if (text.length <= PASS) return;
+    if (event.isError) return text.length > BUDGET ? { content: [{ type: "text", text: text.slice(0, BUDGET) }] } : undefined;
 
     // MCP tools carry the whole CallToolResult; REA's Evidence record is its structuredContent.
     const raw = (event.structuredContent ?? parse(text)) as { structuredContent?: unknown } | undefined;

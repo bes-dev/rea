@@ -15,8 +15,10 @@ const preview = (value: unknown, depth: number, items: number): unknown => {
   );
 };
 
-/** The most detailed preview that fits `budget` characters. */
+/** The value itself when it fits `budget` characters, otherwise the most detailed preview that does. */
 export const digest = (value: unknown, budget: number) => {
+  const whole = JSON.stringify(value);
+  if (whole.length <= budget) return whole;
   for (const [depth, items] of [[5, 3], [4, 2], [3, 1], [2, 1], [1, 0]]) {
     const text = JSON.stringify(preview(value, depth, items));
     if (text.length <= budget) return text;

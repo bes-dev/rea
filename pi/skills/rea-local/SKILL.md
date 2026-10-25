@@ -16,3 +16,5 @@ description: Reverse engineer apps, binaries, archives, websites or devices with
 6. **Answer with evidence.** Cite addresses, paths and evidence IDs. Separate what was observed from what you infer.
 
 On an error, follow its `remediation`. If it names an adjustable limit, load the `settings` profile.
+
+**Large targets.** Whole-application analysis of a big app can hit REA's per-operation deadline. Take the inventory first (`open_binary` on the archive, then `inspect_artifact`; or `inspect_desktop_application` for an app directory), find the relevant paths with `rea_view` or `jq`, then analyze only those files with `source_paths`. Raise `analysis_timeout_ms` only when the whole application is really needed, and reuse the `partial_observation` a timeout returns.

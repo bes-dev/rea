@@ -19,7 +19,11 @@ export default function (pi: ExtensionAPI) {
   pi.registerMcpServer("rea", {
     command,
     args: ["--mcp"],
-    env: { REA_MCP_OUTPUT_SCHEMA_PROFILE: "off" },
+    // Providers are configured by environment (GHIDRA_INSTALL_DIR, JAVA_HOME, REA_IDA_MCP_CONFIG, …).
+    env: {
+      ...Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)),
+      REA_MCP_OUTPUT_SCHEMA_PROFILE: "off",
+    },
     exposure: "deferred",
     timeout: 1800,
     description: "REA reverse engineering of binaries, apps, archives, websites and devices; load tool sets with rea_profile",

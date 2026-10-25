@@ -23,13 +23,15 @@ Measured with REA 6.8.0:
   `tool_search` is turned off because the profiles cover every tool and its
   results are large (3–23 KB). Profiles: `triage`, `native`, `native-deep`,
   `hopper`, `apple`, `js`, `web`, `android`, `managed`, `dynamic`, `firmware`,
-  `formats`, `compare`, `reconstruct`, `settings`. They cover every REA tool and live in
-  [`extensions/rea/profiles.ts`](extensions/rea/profiles.ts).
+  `formats`, `compare`, `reconstruct`, `settings`. They cover every REA tool
+  and live in [`extensions/rea/profiles.ts`](extensions/rea/profiles.ts).
 - **Summary first.** Calls to tools that accept `detail` default to
   `"summary"` unless the model asks for `"complete"`.
-- **Offloading.** A REA result larger than 3,000 characters is saved to
-  `.rea/<evidence_id>.json` in the working directory. The model gets the
-  path and a structural digest: keys, counts, the first items, short strings.
+- **Offloading.** A REA result larger than 1,500 characters is saved to
+  `.rea/<evidence_id>.json` in the working directory. The model gets the path
+  and the operation's `normalized_result` without the Evidence envelope. A
+  result over 6,000 characters becomes a structural digest: keys, counts, the
+  first items, short strings.
   Codemode scripts still receive complete results.
 - **Examples restored.** Compact schemas drop REA's input examples, though they
   are the cheapest way to show union-shaped inputs. At session start the
@@ -64,15 +66,39 @@ over this package's registration and is not deferred.
 |---|---|---|
 | `REA_PI_PROFILES` | `triage` | Profiles for a new session, comma-separated |
 | `REA_COMMAND` | `rea` | REA launcher (it runs `<command> --mcp`) |
-| `REA_PI_DIGEST_CHARS` | `3000` | Results larger than this are offloaded |
+| `REA_PI_DIGEST_CHARS` | `6000` | Larger normalized results are shown as a digest |
 | `REA_PI_ASK_MODEL` | session model | `provider/id` of the model that `rea_ask` uses |
 | `REA_PI_ASK_CHUNK_CHARS` | `60000` | Characters per `rea_ask` sub-call |
 | `REA_PI_ASK_MAX_CHUNKS` | `16` | Upper bound on sub-calls per `rea_ask` |
+| `REA_PI_ASK_REASONING` | `off` | `on` keeps reasoning in `rea_ask` sub-calls |
 
 `rea_ask` needs `jq` for `select`.
 
-Give `rea_ask` a fast model without reasoning, such as
-`REA_PI_ASK_MODEL=lmstudio/qwen3.8-27b-mlx`. A reasoning model writes long
-thinking for every chunk, which makes sub-calls several times slower.
-Parallel sub-calls did not help on LM Studio: three requests took 89 s in
-sequence and 102 s in parallel, so chunks are read one at a time.
+`rea_ask` turns reasoning off for its sub-calls on OpenAI-compatible servers
+(`reasoning_effort: "none"`, which LM Studio honors); set
+`REA_PI_ASK_REASONING=on` to keep it, or when a server rejects that value. On LM Studio with qwen3.8-27b-splash this
+cut a short answer from 76 to 4 output tokens. What remains is prompt
+processing: one question over a 285 KB Evidence file (4 chunks, ~70K input
+tokens) took about 7 minutes with that model and 6 minutes with
+gemma-4-12b. So narrow the data with `jq`/`rg` or `select` first; `rea_ask` is
+for meaning across a slice, not for finding keys. Parallel sub-calls did not
+help either: three requests took 89 s in sequence and 102 s in parallel, so
+chunks are read one at a time.
+
+## Native analysis with Ghidra on Apple silicon
+
+REA accepts Ghidra 12.1.x with JDK 21. Official Ghidra archives carry no macOS
+decompiler, so build it once:
+
+```bash
+brew install openjdk@21
+export JAVA_HOME="$(brew --prefix openjdk@21)/libexec/openjdk.jdk/Contents/Home"
+gh release download Ghidra_12.1.4_build -R NationalSecurityAgency/ghidra -p '*.zip'
+unzip ghidra_12.1.4_PUBLIC_*.zip -d ~/tools
+(cd ~/tools/ghidra_12.1.4_PUBLIC/support/gradle && ./gradlew buildNatives)
+export GHIDRA_INSTALL_DIR=~/tools/ghidra_12.1.4_PUBLIC
+rea doctor --json   # the ghidra provider must report available: true
+```
+
+Start Pi with `GHIDRA_INSTALL_DIR` and `JAVA_HOME` set; the extension passes its
+environment to REA.

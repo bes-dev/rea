@@ -52,7 +52,7 @@ export const PROFILES: Record<string, { description: string; tools: string[] }> 
       "analyze_javascript_application", "recover_javascript_sources", "trace_javascript_semantics",
       "trace_application_feature", "trace_feature", "compare_application_versions",
       "compare_javascript_export_shapes", "compare_source_to_bundle", "inspect_electron_fuses",
-      "inspect_artifact", "extract_artifact",
+      "open_binary", "close_binary", "inspect_artifact", "extract_artifact",
     ],
   },
   web: {

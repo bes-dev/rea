@@ -7,6 +7,7 @@ import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-
 const MAX_CHUNKS = Number(process.env.REA_PI_ASK_MAX_CHUNKS ?? 16);
 // Small chunks keep a local model accurate; RLM-style reading trades more calls for focus.
 const CHUNK_CHARS = Number(process.env.REA_PI_ASK_CHUNK_CHARS ?? 60000);
+const NO_REASONING = process.env.REA_PI_ASK_REASONING !== "on";
 const SYSTEM =
   "You read one part of a reverse-engineering result. Answer the question only from this data, briefly, " +
   "citing exact addresses, names, paths and evidence IDs. Reply NONE if this part has nothing relevant. " +
@@ -38,11 +39,14 @@ export const registerAsk = (pi: ExtensionAPI) =>
       async execute(_id, { path: target, question, select }, signal, _onUpdate, ctx) {
         const path = target.startsWith("ev_") ? join(ctx.cwd, ".rea", `${target}.json`) : target;
         // Evidence is full of SHA-256 digests, which cost many tokens and carry little meaning.
-        const data = (
+        // The question is shortened alike, so the IDs it names still match the data.
+        const shorten = (text: string) => text.replace(/([0-9a-f]{12})[0-9a-f]{52}/g, "$1…");
+        const data = shorten(
           select
             ? execFileSync("jq", ["-c", select, path], { maxBuffer: 2 ** 31 - 1 }).toString()
-            : readFileSync(path, "utf8")
-        ).replace(/([0-9a-f]{12})[0-9a-f]{52}/g, "$1…");
+            : readFileSync(path, "utf8"),
+        );
+        const query = shorten(question);
         const model = subModel(ctx);
         const size = Math.min(CHUNK_CHARS, model.contextWindow * 2);
         const chunks = Array.from({ length: Math.ceil(data.length / size) }, (_, i) => data.slice(i * size, (i + 1) * size));
@@ -54,8 +58,18 @@ export const registerAsk = (pi: ExtensionAPI) =>
           const reply = await ctx.modelRegistry.complete(
             model,
             { systemPrompt: SYSTEM, messages: [{ role: "user", content: prompt, timestamp: Date.now() }] },
-            { signal },
+            // Sub-calls answer narrow questions; reasoning would multiply their time. LM Studio and
+            // other OpenAI-compatible servers turn it off with reasoning_effort "none".
+            {
+              signal,
+              onPayload: (payload: unknown) =>
+                model.api === "openai-completions" && NO_REASONING
+                  ? { ...(payload as object), reasoning_effort: "none" }
+                  : undefined,
+            },
           );
+          if (reply.stopReason === "error" || reply.stopReason === "aborted")
+            throw new Error(`rea_ask model ${model.provider}/${model.id}: ${reply.errorMessage ?? reply.stopReason}`);
           usage.input += reply.usage.input;
           usage.output += reply.usage.output;
           usage.totalTokens += reply.usage.totalTokens;
@@ -65,13 +79,14 @@ export const registerAsk = (pi: ExtensionAPI) =>
 
         const answers: string[] = [];
         for (const [i, chunk] of chunks.entries()) {
-          const answer = await ask(`${question}\n\n<data part="${i + 1}/${chunks.length}">\n${chunk}\n</data>`);
-          if (answer && answer !== "NONE") answers.push(answer);
+          const answer = await ask(`${query}\n\n<data part="${i + 1}/${chunks.length}">\n${chunk}\n</data>`);
+          if (answer && !/^NONE\b/.test(answer)) answers.push(answer);
         }
         const text =
           answers.length > 1
-            ? await ask(`${question}\n\nCombine these partial answers into one:\n\n${answers.join("\n---\n")}`)
-            : (answers[0] ?? "NONE: the data has nothing relevant.");
+            ? await ask(`${query}\n\nCombine these partial answers into one:\n\n${answers.join("\n---\n")}`)
+            : (answers[0] ??
+              `NONE: no part of ${chunks.length} had relevant data. Narrow it with select, or find exact keys with jq/rg first.`);
         return { content: [{ type: "text", text }], details: undefined, usage };
       },
     }),
