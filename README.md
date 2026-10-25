@@ -96,6 +96,11 @@ complete advertised field guidance and nested validation details. Both profiles
 keep the full tool set and canonical server validation. See
 "Compact input schema profile" in the MCP contracts guide.
 
+For [Pi](https://github.com/earendil-works/pi) with a local model, use the
+[`pi/`](pi/README.md) package instead of `rea setup --client pi`. It loads REA
+tools in task profiles, offloads large Evidence to files and reads them with
+separate model calls.
+
 ### Ask your agent
 
 ```text

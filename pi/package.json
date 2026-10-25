@@ -1,0 +1,13 @@
+{
+  "name": "rea-pi",
+  "version": "0.1.0",
+  "description": "REA for the Pi coding agent, tuned for local models: task profiles, Evidence offloading, recursive reading",
+  "keywords": ["pi-package", "pi-extension", "reverse-engineering"],
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "pi": {
+    "extensions": ["./extensions/rea/index.ts"],
+    "skills": ["./skills"]
+  }
+}
