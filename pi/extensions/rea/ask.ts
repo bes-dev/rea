@@ -9,7 +9,8 @@ const MAX_CHUNKS = Number(process.env.REA_PI_ASK_MAX_CHUNKS ?? 16);
 const CHUNK_CHARS = Number(process.env.REA_PI_ASK_CHUNK_CHARS ?? 60000);
 const SYSTEM =
   "You read one part of a reverse-engineering result. Answer the question only from this data, briefly, " +
-  "citing exact addresses, names, paths and evidence IDs. Reply NONE if this part has nothing relevant.";
+  "citing exact addresses, names, paths and evidence IDs. Reply NONE if this part has nothing relevant. " +
+  "Hashes and IDs are shortened to their first 12 hex digits followed by …";
 
 /** The sub-model: REA_PI_ASK_MODEL ("provider/id") or the session model. */
 const subModel = (ctx: ExtensionContext) => {
@@ -36,9 +37,12 @@ export const registerAsk = (pi: ExtensionAPI) =>
       }),
       async execute(_id, { path: target, question, select }, signal, _onUpdate, ctx) {
         const path = target.startsWith("ev_") ? join(ctx.cwd, ".rea", `${target}.json`) : target;
-        const data = select
-          ? execFileSync("jq", ["-c", select, path], { maxBuffer: 2 ** 31 - 1 }).toString()
-          : readFileSync(path, "utf8");
+        // Evidence is full of SHA-256 digests, which cost many tokens and carry little meaning.
+        const data = (
+          select
+            ? execFileSync("jq", ["-c", select, path], { maxBuffer: 2 ** 31 - 1 }).toString()
+            : readFileSync(path, "utf8")
+        ).replace(/([0-9a-f]{12})[0-9a-f]{52}/g, "$1…");
         const model = subModel(ctx);
         const size = Math.min(CHUNK_CHARS, model.contextWindow * 2);
         const chunks = Array.from({ length: Math.ceil(data.length / size) }, (_, i) => data.slice(i * size, (i + 1) * size));

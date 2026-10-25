@@ -20,9 +20,10 @@ Measured with REA 6.8.0:
   registered, and only the selected profiles are declared to the model, ~3–11K
   tokens per profile. The model switches with the `rea_profile` tool; you
   switch with `/rea native js`. The selection is saved in the session.
-  Profiles: `triage`, `native`, `native-deep`, `hopper`, `apple`, `js`, `web`,
-  `android`, `managed`, `dynamic`, `firmware`, `formats`, `compare`,
-  `reconstruct`, `settings`. They cover every REA tool and live in
+  `tool_search` is turned off because the profiles cover every tool and its
+  results are large (3–23 KB). Profiles: `triage`, `native`, `native-deep`,
+  `hopper`, `apple`, `js`, `web`, `android`, `managed`, `dynamic`, `firmware`,
+  `formats`, `compare`, `reconstruct`, `settings`. They cover every REA tool and live in
   [`extensions/rea/profiles.ts`](extensions/rea/profiles.ts).
 - **Summary first.** Calls to tools that accept `detail` default to
   `"summary"` unless the model asks for `"complete"`.
@@ -30,13 +31,19 @@ Measured with REA 6.8.0:
   `.rea/<evidence_id>.json` in the working directory. The model gets the
   path and a structural digest: keys, counts, the first items, short strings.
   Codemode scripts still receive complete results.
+- **Examples restored.** Compact schemas drop REA's input examples, though they
+  are the cheapest way to show union-shaped inputs. At session start the
+  extension reads them once from a second `rea --mcp` started with the full
+  profile (~0.2 s), and appends one valid call to each declared REA tool.
 - **`rea_view`.** A wrapper for `inspect_analysis_view` with a short
   description. `guide: "<keyword>"` returns the matching parts of the full
   reference on demand.
 - **`rea_ask`** reads large data recursively, in the style of Recursive
   Language Models. A separate model call reads a file, or a `jq` selection of
-  it, in chunks sized to the model's context window and returns only the
-  answer. Several partial answers are combined in one more call.
+  it, in chunks of 60,000 characters and returns only the answer. Several
+  partial answers are combined in one more call. SHA-256 digests are shortened
+  to 12 hex digits first, which saves 20–25% of an Evidence file's characters.
+  `path` also accepts an evidence ID saved in `.rea/`.
 - **`rea-local` skill.** A short workflow guide that replaces the 35 KB
   bundled skill.
 
@@ -59,6 +66,13 @@ over this package's registration and is not deferred.
 | `REA_COMMAND` | `rea` | REA launcher (it runs `<command> --mcp`) |
 | `REA_PI_DIGEST_CHARS` | `3000` | Results larger than this are offloaded |
 | `REA_PI_ASK_MODEL` | session model | `provider/id` of the model that `rea_ask` uses |
+| `REA_PI_ASK_CHUNK_CHARS` | `60000` | Characters per `rea_ask` sub-call |
 | `REA_PI_ASK_MAX_CHUNKS` | `16` | Upper bound on sub-calls per `rea_ask` |
 
 `rea_ask` needs `jq` for `select`.
+
+Give `rea_ask` a fast model without reasoning, such as
+`REA_PI_ASK_MODEL=lmstudio/qwen3.8-27b-mlx`. A reasoning model writes long
+thinking for every chunk, which makes sub-calls several times slower.
+Parallel sub-calls did not help on LM Studio: three requests took 89 s in
+sequence and 102 s in parallel, so chunks are read one at a time.
